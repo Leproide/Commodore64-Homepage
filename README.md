@@ -4,6 +4,8 @@ A Commodore 64 boot screen as the landing page for my home server, because the y
 
 ![screenshot placeholder — drop a gif/png here, the boot beam is half the charm](docs/screenshot.png)
 
+Demo: [CLICK ME](https://muninn.ovh/c64demo/)
+
 ## What this is (and isn't)
 
 It's a single `index.html` that loads on my home server and pretends to be a 1982 C64 booting up. The list of self-hosted services shows up as a BASIC directory listing. You launch them by clicking, by arrowing through and pressing Enter, or — if you're feeling it — by typing `LOAD"NAME",8,1` like our parents did.
@@ -119,13 +121,13 @@ Drop a `music.mp3` next to `index.html` for the music easter egg.
 
 A few constants worth knowing about, all near the top of their respective `<script>` blocks:
 
-| What | Where | What it does |
-| --- | --- | --- |
-| `MASTER_VOLUME` | keyboard-sound block | Keyboard click volume, 0.0–1.0 |
-| `WAV_PATH`      | keyboard-sound block | Path to the bucklespring folder |
+| What            | Where                | What it does                                                                                                         |
+| --------------- | -------------------- | -------------------------------------------------------------------------------------------------------------------- |
+| `MASTER_VOLUME` | keyboard-sound block | Keyboard click volume, 0.0–1.0                                                                                       |
+| `WAV_PATH`      | keyboard-sound block | Path to the bucklespring folder                                                                                      |
 | `SCAN`          | keyboard-sound block | Browser key → bucklespring scancode map. Remove entries to skip sounds for those keys (and avoid loading their wavs) |
-| `--frame-thick` | CSS `:root`          | Default bezel thickness; JS auto-shrinks if the menu doesn't fit |
-| Phosphor colors | CSS `:root`          | `--phosphor`, `--phosphor-bright`, etc. — change them if you want amber or paper-white phosphor |
+| `--frame-thick` | CSS `:root`          | Default bezel thickness; JS auto-shrinks if the menu doesn't fit                                                     |
+| Phosphor colors | CSS `:root`          | `--phosphor`, `--phosphor-bright`, etc. — change them if you want amber or paper-white phosphor                      |
 
 ## Browser support
 
