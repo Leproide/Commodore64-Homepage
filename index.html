@@ -1,0 +1,1253 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CHANGE ME</title>
+<link rel="icon" type="image/x-icon" href="img/favicon.ico">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=VT323&display=swap" rel="stylesheet">
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --phosphor:        #33ff66;
+  --phosphor-bright: #88ffaa;
+  --phosphor-dim:    #1a8a2a;
+  --bg:              #001a00;
+  --bg-deep:         #000600;
+  --bg-black:        #000000;
+
+  /* C64 frame (border) + screen colours.
+     Frame is a brighter green that contrasts with the inner darker screen,
+     mirroring the classic C64 light-blue-on-dark-blue layout. */
+  --frame-color:     #0d3a18;
+  --screen-color:    #000800;
+
+  /* Frame thickness multiplier (unitless).
+     0   = no frame, content uses full viewport.
+     4   = generous frame (default).
+     JS will lower this automatically if the menu overflows. */
+  --frame-thick:     4;
+}
+
+html, body {
+  height: 100%;
+  width: 100%;
+  background: var(--bg-black);
+  color: var(--phosphor);
+  font-family: 'VT323', 'Courier New', Courier, monospace;
+  overflow: hidden;
+  /* Bigger than before so the text fills the screen better. */
+  font-size: clamp(16px, 3vw, 48px);
+}
+
+/* ============================================
+   POWER-ON OVERLAY
+   ============================================ */
+.power-on {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  background: var(--bg-black);
+  pointer-events: none;
+  overflow: hidden;
+  animation: crtContainerHide 2.6s forwards;
+}
+
+/* The expanding white beam */
+.power-on::before {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 110vw;
+  height: 110vh;
+  background: #ffffff;
+  box-shadow:
+    0 0 80px #ffffff,
+    0 0 200px rgba(255,255,255,0.6),
+    0 0 400px rgba(180,255,200,0.4);
+  transform: translate(-50%, -50%) scale(0,0);
+  animation: crtBeam 2s ease-out forwards;
+}
+
+@keyframes crtBeam {
+  0%   { transform: translate(-50%, -50%) scale(0, 0);          opacity: 0;   filter: blur(0); }
+  8%   { transform: translate(-50%, -50%) scale(0.004, 0.002);  opacity: 1;   filter: blur(2px); }
+  22%  { transform: translate(-50%, -50%) scale(1, 0.0025);     opacity: 1;   filter: blur(0); }
+  35%  { transform: translate(-50%, -50%) scale(1, 0.0025);     opacity: 1; }
+  55%  { transform: translate(-50%, -50%) scale(1, 1);          opacity: 1; }
+  72%  { transform: translate(-50%, -50%) scale(1, 1);          opacity: 0.6; }
+  100% { transform: translate(-50%, -50%) scale(1, 1);          opacity: 0; }
+}
+
+@keyframes crtContainerHide {
+  0%, 88% { opacity: 1; visibility: visible; }
+  100%    { opacity: 0; visibility: hidden; }
+}
+
+/* ============================================
+   CRT SCREEN  +  C64 FRAME
+   ============================================ */
+.crt {
+  position: fixed;
+  inset: 0;
+  background: var(--frame-color);
+  /* The padding IS the frame.
+     vh on top/bottom, vw on left/right, scaled by --frame-thick. */
+  padding:
+    calc(var(--frame-thick) * 1vh)
+    calc(var(--frame-thick) * 1.4vw);
+  overflow: hidden;
+  /* Subtle inner highlight on the frame to make it feel like a CRT bezel */
+  box-shadow:
+    inset  0  0   30px rgba(0,0,0,0.4),
+    inset  0  0    2px rgba(80,255,120,0.08);
+  /* Smooth resize when the frame thickness adapts */
+  transition: padding 0.45s cubic-bezier(.2,.7,.2,1);
+}
+
+.screen {
+  position: relative;
+  width:  100%;
+  height: 100%;
+  background:
+    radial-gradient(ellipse at center,
+      var(--bg) 0%,
+      var(--screen-color) 70%,
+      var(--bg-black) 100%);
+  overflow: hidden;
+  box-shadow:
+    inset 0 0 80px rgba(0,0,0,0.7),
+    inset 0 0  2px rgba(50,255,100,0.15);
+  /* Stack the boot header on top of the terminal-wrap */
+  display: flex;
+  flex-direction: column;
+  /* Establish a size container so descendants can use cqw + cqh
+     to scale font-size to fit BOTH width and height of the screen. */
+  container-type: size;
+}
+
+/* ============================================
+   BOOT HEADER — separate centred block at the
+   top of the screen, NOT inside the 40-col
+   terminal flow. Always visible.
+   ============================================ */
+.boot-header {
+  flex-shrink: 0;
+  text-align: center;
+  width: 100%;
+  /* padding: 1.2vh 1vw 0.4vh; */
+  white-space: pre;
+  font-family: 'VT323', 'Courier New', monospace;
+  /* Auto-scale to whichever dimension constrains: width for narrow
+     viewports, height for wide ones. Caps so we never bloat huge. */
+  font-size: min(3.8cqw, 3.4cqh, 80px);
+  color: var(--phosphor);
+  user-select: none;
+  text-shadow:
+    0 0 1px  var(--phosphor-bright),
+    0 0 4px  var(--phosphor),
+    0 0 12px rgba(51, 255, 102, 0.7),
+    0 0 22px rgba(51, 255, 102, 0.35);
+  animation: textFlicker 2.4s infinite;
+}
+
+/* Second authentic-C64 banner line: the RAM/BYTES-FREE message.
+   Centred just like the COMMODORE header above. */
+.boot-ram {
+  flex-shrink: 0;
+  text-align: center;
+  width: 100%;
+  /* padding: 1.2vh 1vw 0.8vh; */
+  white-space: pre;
+  font-family: 'VT323', 'Courier New', monospace;
+  font-size: min(3.8cqw, 3.4cqh, 80px);
+  color: var(--phosphor);
+  user-select: none;
+  text-shadow:
+    0 0 1px  var(--phosphor-bright),
+    0 0 4px  var(--phosphor),
+    0 0 12px rgba(51, 255, 102, 0.7),
+    0 0 22px rgba(51, 255, 102, 0.35);
+  animation: textFlicker 2.4s infinite;
+}
+
+.terminal-wrap {
+  /* Takes the remaining vertical space below the boot header */
+  flex: 1 1 0;
+  min-height: 0;
+  position: relative;
+  overflow: hidden;
+  padding: 0.2vh 1vw 0.8vh;
+  /* Body text aligned to the LEFT of the screen — only the header above
+     is centred. */
+  display: flex;
+  justify-content: flex-start;
+  align-items: flex-start;
+}
+
+.terminal {
+  /* Real C64 screen is 40 columns wide — we mimic that exactly */
+  width: 40ch;
+  max-width: 100%;
+  /* content-box → the 40ch is the actual usable text width;
+     padding adds outside it. This guarantees a 39-char line
+     like the 64K RAM SYSTEM banner never wraps. */
+  box-sizing: content-box;
+  /* Small horizontal padding so the phosphor glow on leftmost
+     characters (R of READY, L of LOAD…) isn't sawn off by the
+     wrap's overflow:hidden. */
+  padding: 0 0.5ch;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-family: 'VT323', 'Courier New', monospace;
+  /* Auto-fit:
+       3.8cqw → 40 chars fill ≈91 % of the screen width.
+       3.4cqh → enough room for the full ~23-line load sequence
+                PLUS a comfortable buffer below the content,
+                so nothing ever spills past the bottom of the page. */
+  font-size: min(3.8cqw, 3.4cqh, 80px);
+  line-height: 1.05;
+  letter-spacing: 0;
+  color: var(--phosphor);
+  user-select: none;
+  text-shadow:
+    0 0 1px  var(--phosphor-bright),
+    0 0 4px  var(--phosphor),
+    0 0 12px rgba(51, 255, 102, 0.7),
+    0 0 22px rgba(51, 255, 102, 0.35);
+  animation: textFlicker 2.4s infinite;
+}
+
+@keyframes textFlicker {
+  0%, 100% {
+    text-shadow:
+      0 0 1px  var(--phosphor-bright),
+      0 0 4px  var(--phosphor),
+      0 0 12px rgba(51, 255, 102, 0.7),
+      0 0 22px rgba(51, 255, 102, 0.35);
+  }
+  50% {
+    text-shadow:
+      0 0 1px  var(--phosphor-bright),
+      0 0 5px  var(--phosphor),
+      0 0 14px rgba(51, 255, 102, 0.85),
+      0 0 28px rgba(51, 255, 102, 0.45);
+  }
+}
+
+/* ============================================
+   MENU ITEMS
+   ============================================ */
+.menu-item {
+  cursor: pointer;
+  white-space: pre;
+  display: inline;
+}
+
+.menu-item.selected,
+.menu-item:active {
+  background: var(--phosphor);
+  color: var(--bg-deep);
+  text-shadow: none;
+  /* Cancel the flicker glow on selected */
+  animation: none;
+  box-shadow: 0 0 6px rgba(51,255,102,0.8);
+}
+
+/* ============================================
+   CURSOR (blinking block)
+   ============================================ */
+.cursor {
+  display: inline-block;
+  background: var(--phosphor);
+  color: var(--bg-deep);
+  text-shadow: none;
+  width: 0.55em;
+  height: 1em;
+  vertical-align: -0.12em;
+  box-shadow: 0 0 8px var(--phosphor);
+  animation: cursorBlink 0.85s steps(1) infinite;
+}
+
+@keyframes cursorBlink {
+  0%, 49%   { opacity: 1; }
+  50%, 100% { opacity: 0; }
+}
+
+/* ============================================
+   STATIC SCANLINES (horizontal stripes)
+   ============================================ */
+.scanlines {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 100;
+  background:
+    repeating-linear-gradient(
+      to bottom,
+      transparent 0px,
+      transparent 2px,
+      rgba(0, 0, 0, 0.30) 3px,
+      rgba(0, 0, 0, 0.30) 4px
+    );
+  mix-blend-mode: multiply;
+}
+
+/* Slight RGB sub-pixel tint */
+.subpixel {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 101;
+  background:
+    repeating-linear-gradient(
+      90deg,
+      rgba(255, 0, 0, 0.04) 0px,
+      rgba(0, 255, 0, 0.02) 1px,
+      rgba(0, 0, 255, 0.04) 2px,
+      transparent 3px
+    );
+  mix-blend-mode: screen;
+  opacity: 0.6;
+}
+
+/* Moving horizontal scanline (slow drift) */
+.scanline {
+  position: fixed;
+  left: 0; right: 0;
+  top: -120px;
+  height: 120px;
+  z-index: 102;
+  pointer-events: none;
+  background: linear-gradient(to bottom,
+    transparent 0%,
+    rgba(255,255,255,0.015) 40%,
+    rgba(255,255,255,0.05)  85%,
+    rgba(255,255,255,0.10)  98%,
+    transparent 100%);
+  animation: moveScanline 9.7s linear infinite;
+}
+
+@keyframes moveScanline {
+  0%   { top: -120px; }
+  100% { top: 100vh; }
+}
+
+/* Flicker overlay */
+.flicker {
+  position: fixed;
+  inset: 0;
+  z-index: 103;
+  pointer-events: none;
+  background: rgba(20, 30, 20, 0.05);
+  animation: flicker 0.13s steps(1) infinite;
+}
+
+@keyframes flicker {
+  0%, 100% { opacity: 0.10; }
+  20%      { opacity: 0.30; }
+  40%      { opacity: 0.05; }
+  60%      { opacity: 0.40; }
+  80%      { opacity: 0.12; }
+}
+
+/* Vignette + subtle barrel feel */
+.vignette {
+  position: fixed;
+  inset: 0;
+  z-index: 104;
+  pointer-events: none;
+  background:
+    radial-gradient(ellipse at center,
+      transparent 35%,
+      rgba(0,0,0,0.25) 75%,
+      rgba(0,0,0,0.7)  100%);
+}
+
+/* Bloom / phosphor haze (lives inside .screen so it doesn't leak onto the frame) */
+.glow {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(ellipse at center,
+      rgba(51, 255, 102, 0.07) 0%,
+      transparent 70%);
+}
+
+/* ============================================
+   MOBILE / SMALL VIEWPORTS
+   The terminal scales itself via container queries, so we don't
+   need viewport-based font tweaks for it. These rules only affect
+   any non-terminal text fallbacks.
+   ============================================ */
+@media (max-width: 640px) {
+  html, body { font-size: 14px; }
+}
+
+/* Reduced motion */
+@media (prefers-reduced-motion: reduce) {
+  .terminal { animation: none; }
+  .flicker  { animation: none; opacity: 0.08; }
+  .scanline { animation: none; display: none; }
+}
+</style>
+</head>
+<body>
+
+<!-- CRT screen + content -->
+<div class="crt">
+  <div class="screen">
+    <div class="boot-header" id="bootHeader">**** COMMODORE 64 BASIC V2 ****</div>
+    <div class="boot-ram" id="bootRam">64K RAM SYSTEM  38911 BASIC BYTES FREE</div>
+    <div class="terminal-wrap">
+      <div class="terminal" id="terminal"></div>
+    </div>
+    <div class="glow"></div>
+  </div>
+</div>
+
+<!-- Visual overlays -->
+<div class="scanlines"></div>
+<div class="subpixel"></div>
+<div class="scanline"></div>
+<div class="flicker"></div>
+<div class="vignette"></div>
+
+<!-- Power-on overlay (covers everything until faded) -->
+<div class="power-on" id="powerOn"></div>
+
+<!-- =====================================================
+     CONFIG — Edit this JSON to add / remove services.
+     ===================================================== -->
+<script type="application/json" id="loader-config">
+{
+  "bannerName": "YOUR.DOMAIN",
+  "blocksFree": 664,
+  "links": [
+    { "name": "VAULTWARDEN", "url": "https://vault.example.com" },
+    { "name": "MAIL",        "url": "https://mail.example.com"  },
+    { "name": "TORRENT",     "url": "https://torrent.example.com" }
+  ]
+}
+</script>
+
+<script>
+/* ============================================================
+ * changeme.com — C64 LOADER
+ * The list of services is loaded from the JSON block above.
+ * ============================================================ */
+const CONFIG = JSON.parse(document.getElementById('loader-config').textContent);
+
+/* ============================================================
+ * Optional load sound — gracefully ignored if load.mp3 is absent
+ * ============================================================ */
+const loadAudio = (() => {
+  try {
+    const a = new Audio('load.mp3');
+    a.preload = 'auto';
+    a.volume  = 0.7;
+    a.addEventListener('error',    () => { a._broken = true; });
+    a.addEventListener('stalled',  () => { /* network slow, ignore */ });
+    return a;
+  } catch (e) {
+    return { _broken: true, play(){}, pause(){} };
+  }
+})();
+
+function playLoadSound() {
+  if (loadAudio._broken) return;
+  try {
+    loadAudio.currentTime = 0;
+    const p = loadAudio.play();
+    if (p && typeof p.catch === 'function') {
+      // Ignore autoplay or missing-file rejections silently.
+      p.catch(() => { loadAudio._broken = true; });
+    }
+  } catch (e) { /* silent */ }
+}
+
+function stopLoadSound() {
+  if (loadAudio._broken) return;
+  try {
+    loadAudio.pause();
+    loadAudio.currentTime = 0;
+  } catch (e) { /* silent */ }
+}
+
+/* ============================================================
+ * Background music — triggered by LOAD"MUSIC",8,1 or Konami code.
+ * Plays music.mp3 if present; silently no-ops otherwise.
+ * ============================================================ */
+const musicAudio = (() => {
+  try {
+    const a = new Audio('music.mp3');
+    a.preload = 'auto';
+    a.loop    = true;
+    a.volume  = 0.55;
+    a.addEventListener('error', () => { a._broken = true; });
+    return a;
+  } catch (e) {
+    return { _broken: true, play(){}, pause(){} };
+  }
+})();
+
+function playMusic() {
+  if (musicAudio._broken) return;
+  try {
+    musicAudio.currentTime = 0;
+    const p = musicAudio.play();
+    if (p && typeof p.catch === 'function') {
+      p.catch(() => { musicAudio._broken = true; });
+    }
+  } catch (e) { /* silent */ }
+}
+
+function stopMusic() {
+  if (musicAudio._broken) return;
+  try {
+    musicAudio.pause();
+    musicAudio.currentTime = 0;
+  } catch (e) { /* silent */ }
+}
+
+function isMusicPlaying() {
+  return !musicAudio._broken && !musicAudio.paused;
+}
+
+/* ============================================================
+ * State
+ * ============================================================ */
+const state = {
+  mode: 'boot',          // 'boot' | 'menu' | 'loading'
+  selectedIndex: 0,
+  inputBuffer: '',
+  busy: true,
+};
+
+const terminal = document.getElementById('terminal');
+const powerOn  = document.getElementById('powerOn');
+const screenEl = document.querySelector('.screen');
+const wrapEl   = document.querySelector('.terminal-wrap');
+
+/* ============================================================
+ * Helpers
+ * ============================================================ */
+const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+
+/* Add a centered single-line block (used for the COMMODORE header). */
+function appendCenteredLine(text) {
+  const span = document.createElement('span');
+  span.style.display    = 'block';
+  span.style.textAlign  = 'center';
+  span.style.whiteSpace = 'pre';
+  span.textContent      = text;
+  terminal.appendChild(span);
+}
+
+/* Auto-shrink the C64 frame thickness if the terminal content overflows
+   the inner screen area. Goes from 4 (default) down to 0.2 (bare-minimum
+   visible bezel) until everything fits. */
+function fitFrame() {
+  if (!wrapEl || !terminal) return;
+  const root = document.documentElement;
+  const sizes = [4, 3.4, 2.8, 2.3, 1.8, 1.4, 1, 0.7, 0.4, 0.2];
+
+  for (const t of sizes) {
+    root.style.setProperty('--frame-thick', t);
+    // Force layout so we can measure with the new padding applied
+    void wrapEl.offsetHeight;
+    if (terminal.scrollHeight <= wrapEl.clientHeight + 1) return;
+  }
+  // Even at the minimum the content overflows — leave at the smallest value.
+}
+
+window.addEventListener('resize', () => {
+  // Re-fit on viewport changes (only meaningful once the menu is rendered).
+  if (state.mode === 'menu' || state.mode === 'loading') fitFrame();
+});
+
+function escapeHTML(s) {
+  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+function appendText(text) {
+  terminal.insertAdjacentText('beforeend', text);
+}
+
+async function typeText(text, charDelay = 35, jitter = 18) {
+  for (const ch of text) {
+    appendText(ch);
+    const d = charDelay + (Math.random() * jitter - jitter / 2);
+    await sleep(Math.max(0, d));
+  }
+}
+
+function clearScreen() {
+  terminal.innerHTML = '';
+  cursorEl  = null;
+  inputLineEl = null;
+  inputTextEl = null;
+  menuItemEls = [];
+}
+
+/* ============================================================
+ * Cursor (boot phase)
+ * ============================================================ */
+let cursorEl = null;
+
+function showCursor() {
+  if (cursorEl) return;
+  cursorEl = document.createElement('span');
+  cursorEl.className = 'cursor';
+  terminal.appendChild(cursorEl);
+}
+
+function hideCursor() {
+  if (!cursorEl) return;
+  cursorEl.remove();
+  cursorEl = null;
+}
+
+/* ============================================================
+ * Input prompt (menu phase)
+ * ============================================================ */
+let inputLineEl = null;
+let inputTextEl = null;
+
+function showInputPrompt() {
+  removeInputPrompt();
+  hideCursor();
+
+  inputLineEl = document.createElement('span');
+  inputTextEl = document.createElement('span');
+  const cur   = document.createElement('span');
+  cur.className = 'cursor';
+
+  inputLineEl.appendChild(inputTextEl);
+  inputLineEl.appendChild(cur);
+  terminal.appendChild(inputLineEl);
+  cursorEl = cur;
+}
+
+function removeInputPrompt() {
+  if (inputLineEl) {
+    inputLineEl.remove();
+    inputLineEl = null;
+    inputTextEl = null;
+    cursorEl = null;
+  }
+}
+
+/* When the user submits a command, we "freeze" the prompt instead of
+   wiping it: the cursor is removed and whatever they typed stays on
+   screen as plain text, exactly like a real C64 echoing the line they
+   entered. The frozen text is later swept away by truncateBelowMarker. */
+function freezeInputPrompt() {
+  if (!inputLineEl) return;
+  const typedText = state.inputBuffer || '';
+  inputLineEl.remove();
+  inputLineEl = null;
+  inputTextEl = null;
+  cursorEl = null;
+  if (typedText) {
+    appendText(typedText + '\n');
+  }
+}
+
+function updateInputDisplay() {
+  if (inputTextEl) {
+    inputTextEl.textContent = state.inputBuffer;
+  }
+}
+
+/* ============================================================
+ * Post-menu marker.
+ * After the initial boot + menu listing is rendered, we drop an
+ * invisible marker into the terminal right after the menu's READY.
+ * Everything the user produces afterwards (typed commands, loading
+ * sequences, error messages) lives BELOW this marker, and is wiped
+ * by truncateBelowMarker() so the screen never fills up.
+ * ============================================================ */
+let postMenuMarker = null;
+
+function placePostMenuMarker() {
+  postMenuMarker = document.createElement('span');
+  postMenuMarker.dataset.marker = 'post-menu';
+  terminal.appendChild(postMenuMarker);
+}
+
+function truncateBelowMarker() {
+  if (!postMenuMarker) return;
+  let next = postMenuMarker.nextSibling;
+  while (next) {
+    const toRemove = next;
+    next = next.nextSibling;
+    toRemove.remove();
+  }
+  // Any active prompt is now gone; clear the references too
+  inputLineEl = null;
+  inputTextEl = null;
+  cursorEl = null;
+}
+
+/* ============================================================
+ * Listing format helpers
+ * ============================================================ */
+const LINE_WIDTH = 38;
+
+function formatLine(blocks, quotedName, type) {
+  const blocksStr = String(blocks).padStart(3, ' ');
+  const left = `${blocksStr} ${quotedName}`;
+  const padLen = Math.max(2, LINE_WIDTH - left.length - type.length);
+  return left + ' '.repeat(padLen) + type;
+}
+
+/* ============================================================
+ * Menu rendering
+ * ============================================================ */
+let menuItemEls = [];
+
+function renderMenu() {
+  menuItemEls = [];
+
+  // Header (directory name)
+  const headerName = `"*> ${CONFIG.bannerName} <*"`;
+  const headerLine = formatLine(0, headerName, String(CONFIG.links.length).padStart(2,' '));
+  appendText('\n' + headerLine + '\n');
+
+  // Menu items
+  CONFIG.links.forEach((link, idx) => {
+    const itemEl = document.createElement('span');
+    itemEl.className = 'menu-item';
+    itemEl.dataset.index = idx;
+    itemEl.textContent = formatLine(idx + 1, `"${link.name}"`, 'PRG');
+
+    itemEl.addEventListener('click', () => {
+      if (state.busy) return;
+      state.selectedIndex = idx;
+      updateHighlight();
+      selectItem(idx);
+    });
+    itemEl.addEventListener('mouseenter', () => {
+      if (state.busy) return;
+      state.selectedIndex = idx;
+      updateHighlight();
+    });
+
+    terminal.appendChild(itemEl);
+    appendText('\n');
+    menuItemEls.push(itemEl);
+  });
+
+  // Footer
+  appendText(`${CONFIG.blocksFree} BLOCKS FREE.\n\n`);
+  appendText('READY.\n');
+
+  // Marker: any user-generated content (typed commands, loading
+  // sequences, errors) lives below this point and is wiped after a
+  // short delay so the screen doesn't keep growing.
+  placePostMenuMarker();
+
+  updateHighlight();
+
+  // Adjust the C64 frame thickness so everything fits without a scrollbar
+  fitFrame();
+}
+
+function updateHighlight() {
+  menuItemEls.forEach((el, idx) => {
+    el.classList.toggle('selected', idx === state.selectedIndex);
+  });
+}
+
+/* ============================================================
+ * Boot sequence (CRT power-on + first listing)
+ * ============================================================ */
+async function bootSequence() {
+  state.busy = true;
+  state.mode = 'boot';
+
+  // Wait for the CRT beam to "warm up"
+  await sleep(1500);
+
+  // Boot screen — the COMMODORE header and the 64K RAM line are
+  // their own centred elements above. Inside the terminal we only
+  // type the rest of the BASIC boot output (READY. + LOAD prompt),
+  // which stays flush-left.
+  appendText('READY.\n');
+
+  // Wait for power-on overlay to finish fading
+  await sleep(900);
+
+  // Idle blink before auto-typing
+  showCursor();
+  await sleep(750);
+  hideCursor();
+
+  // Auto-type LOAD"LOADER",8,1
+  await typeText('LOAD"LOADER",8,1', 80, 40);
+  await sleep(220);
+  appendText('\n');
+  await sleep(450);
+
+  // Loading messages
+  await loadingSequence('LOADER');
+
+  // Show the menu listing
+  renderMenu();
+  enterMenuMode();
+}
+
+/* ============================================================
+ * Loading message block
+ *   SEARCHING FOR <NAME>
+ *   LOADING
+ *   READY.
+ *   RUN
+ * ============================================================ */
+async function loadingSequence(name, fast = false) {
+  const tDelay = fast ? 18 : 28;
+  appendText('\n');
+  await typeText(`SEARCHING FOR ${name}`, tDelay, 12);
+  appendText('\n');
+  await sleep(fast ? 350 : 600);
+  await typeText('LOADING', tDelay, 12);
+  appendText('\n');
+  await sleep(fast ? 600 : 950);
+  await typeText('READY.', tDelay, 12);
+  appendText('\n');
+  await sleep(180);
+  await typeText('RUN', tDelay, 12);
+  appendText('\n');
+  await sleep(fast ? 350 : 600);
+}
+
+/* ============================================================
+ * Enter menu mode (interactive)
+ * ============================================================ */
+function enterMenuMode() {
+  state.mode = 'menu';
+  state.selectedIndex = 0;
+  state.inputBuffer = '';
+  state.busy = false;
+  updateHighlight();
+  showInputPrompt();
+}
+
+/* ============================================================
+ * After the visible loading cycle (link load, music, or error)
+ * finishes, we wait a moment, wipe everything below the post-menu
+ * marker, and put a fresh input prompt in its place.
+ * ============================================================ */
+function resetToPrompt() {
+  truncateBelowMarker();
+  state.inputBuffer = '';
+  state.busy = false;
+  state.mode = 'menu';
+  showInputPrompt();
+}
+
+/* ============================================================
+ * Selecting an item -> open URL, then auto-clean the screen
+ * after 2 seconds.
+ * ============================================================ */
+async function selectItem(idx) {
+  if (state.busy) return;
+  if (idx < 0 || idx >= CONFIG.links.length) return;
+
+  state.busy = true;
+  state.mode = 'loading';
+
+  // Echo the user's typed command (if any) and remove the live prompt
+  freezeInputPrompt();
+
+  const link = CONFIG.links[idx];
+
+  playLoadSound();
+  await loadingSequence(link.name);
+  stopLoadSound();
+
+  // Open the link in a new tab
+  try {
+    window.open(link.url, '_blank', 'noopener,noreferrer');
+  } catch (e) { /* popup blocked - silent */ }
+
+  // Pause so the user reads the load output, then sweep it away
+  await sleep(2000);
+  resetToPrompt();
+}
+
+/* ============================================================
+ * Trigger background music (LOAD"MUSIC",8,1) — same on-screen
+ * flow as a normal load, but starts music.mp3 instead of opening
+ * a URL.
+ * ============================================================ */
+async function triggerMusic() {
+  if (state.busy) return;
+  state.busy = true;
+  state.mode = 'loading';
+
+  freezeInputPrompt();
+
+  playLoadSound();
+  await loadingSequence('MUSIC');
+  stopLoadSound();
+
+  playMusic();
+
+  await sleep(2000);
+  resetToPrompt();
+}
+
+/* ============================================================
+ * Konami code: ↑ ↑ ↓ ↓ ← → ← → B A
+ * Auto-types LOAD"MUSIC",8,1 and runs the same flow.
+ * ============================================================ */
+const KONAMI = ['ArrowUp','ArrowUp','ArrowDown','ArrowDown',
+                'ArrowLeft','ArrowRight','ArrowLeft','ArrowRight',
+                'b','a'];
+let konamiIdx = 0;
+
+function konamiOnKey(key) {
+  const k = key.toLowerCase();
+  if (k === KONAMI[konamiIdx].toLowerCase()) {
+    konamiIdx++;
+    if (konamiIdx === KONAMI.length) {
+      konamiIdx = 0;
+      konamiActivate();
+    }
+  } else {
+    konamiIdx = (k === KONAMI[0].toLowerCase()) ? 1 : 0;
+  }
+}
+
+async function konamiActivate() {
+  if (state.busy || state.mode !== 'menu') return;
+
+  state.busy = true;
+  state.mode = 'loading';
+
+  // Drop the live prompt and whatever the user was typing
+  state.inputBuffer = '';
+  removeInputPrompt();
+
+  // Auto-type the magic command, so the screen shows what's happening
+  await typeText('LOAD"MUSIC",8,1', 60, 25);
+  appendText('\n');
+  await sleep(280);
+
+  playLoadSound();
+  await loadingSequence('MUSIC');
+  stopLoadSound();
+  playMusic();
+
+  await sleep(2000);
+  resetToPrompt();
+}
+
+/* ============================================================
+ * Command parsing
+ * ============================================================ */
+function findLinkByName(name) {
+  const upper = name.toUpperCase().trim();
+  return CONFIG.links.findIndex(l => l.name.toUpperCase() === upper);
+}
+
+/* Names handled by the loader without being in the visible directory.
+   Edit / extend here to add more hidden Easter-egg commands. */
+function isSpecialName(name) {
+  return name.toUpperCase().trim() === 'MUSIC';
+}
+
+function handleEnter() {
+  if (state.busy) return;
+
+  const buf = state.inputBuffer.trim();
+
+  // Empty input -> launch the highlighted item
+  if (buf.length === 0) {
+    selectItem(state.selectedIndex);
+    return;
+  }
+
+  // Match LOAD"NAME",8,1   (case-insensitive, ,1 optional, flexible spaces)
+  const match = buf.match(/^LOAD\s*"([^"]+)"\s*,\s*8\s*(?:,\s*1)?\s*$/i);
+  if (match) {
+    const name = match[1];
+
+    // Hidden "MUSIC" command -> background music
+    if (isSpecialName(name)) {
+      state.inputBuffer = '';
+      triggerMusic();
+      return;
+    }
+
+    const idx = findLinkByName(name);
+    if (idx >= 0) {
+      state.inputBuffer = '';
+      selectItem(idx);
+    } else {
+      printError('?FILE NOT FOUND  ERROR');
+    }
+    return;
+  }
+
+  printError('?SYNTAX  ERROR');
+}
+
+/* ?SYNTAX ERROR / ?FILE NOT FOUND ERROR — show the echoed command +
+   error message, then auto-clean after 1.5 seconds. */
+function printError(msg) {
+  state.busy = true;
+  state.mode = 'loading';
+
+  freezeInputPrompt();
+  appendText(msg + '\n');
+
+  setTimeout(resetToPrompt, 1500);
+}
+
+/* ============================================================
+ * Keyboard
+ * ============================================================ */
+document.addEventListener('keydown', (e) => {
+  // Let browser shortcuts work
+  if (e.ctrlKey || e.metaKey || e.altKey) return;
+
+  // Konami code is tracked at all times — even if the user is mashing
+  // arrows during menu navigation. The activate function itself gates
+  // on state.mode so it only fires when the loader is idle.
+  konamiOnKey(e.key);
+
+  if (state.busy || state.mode !== 'menu') return;
+
+  switch (e.key) {
+    case 'ArrowUp':
+      e.preventDefault();
+      state.selectedIndex =
+        (state.selectedIndex - 1 + CONFIG.links.length) % CONFIG.links.length;
+      updateHighlight();
+      break;
+
+    case 'ArrowDown':
+      e.preventDefault();
+      state.selectedIndex =
+        (state.selectedIndex + 1) % CONFIG.links.length;
+      updateHighlight();
+      break;
+
+    case 'Enter':
+      e.preventDefault();
+      handleEnter();
+      break;
+
+    case 'Backspace':
+      e.preventDefault();
+      state.inputBuffer = state.inputBuffer.slice(0, -1);
+      updateInputDisplay();
+      break;
+
+    case 'Escape':
+      e.preventDefault();
+      state.inputBuffer = '';
+      updateInputDisplay();
+      break;
+
+    default:
+      // Single printable char -> append uppercase
+      if (e.key.length === 1) {
+        e.preventDefault();
+        state.inputBuffer += e.key.toUpperCase();
+        updateInputDisplay();
+      }
+  }
+});
+
+/* ============================================================
+ * Power-on overlay cleanup after animation
+ * ============================================================ */
+powerOn.addEventListener('animationend', (e) => {
+  if (e.animationName === 'crtContainerHide') {
+    powerOn.style.display = 'none';
+  }
+});
+
+/* ============================================================
+ * Boot
+ * ============================================================ */
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', bootSequence);
+} else {
+  bootSequence();
+}
+</script>
+
+<script>
+/* ============================================================
+ * MECHANICAL KEYBOARD SOUND  (bucklespring real-Model-M samples)
+ *
+ * Uses the recorded WAV samples from the bucklespring project
+ * by Ico Doornekamp — actual IBM Model-M recordings, one pair
+ * per physical key.
+ *   https://github.com/zevv/bucklespring   (GPL-2.0)
+ *
+ * For each scancode XX:
+ *   bucklespring/XX-0.wav  — press (key going down)
+ *   bucklespring/XX-1.wav  — release (spring returning)
+ *
+ * Every browser key maps to its own bucklespring scancode, so
+ * pressing Space sounds like a real Model-M spacebar, Shift
+ * sounds like a Shift, A sounds like an A, etc. On the matching
+ * keyup, the release wav of THE SAME scancode is played — one
+ * coherent press→release pair per physical keystroke.
+ *
+ * Files for the entire mapping are preloaded once at startup.
+ * Missing files are silently skipped — keys whose wav isn't
+ * present just don't make sound, the rest still work.
+ *
+ * Self-contained: does not modify any other code.
+ * ============================================================ */
+(() => {
+  const MASTER_VOLUME = 0.7;
+  const WAV_PATH      = 'bucklespring/';
+
+  // ---- Browser KeyboardEvent.code → bucklespring scancode (hex)
+  //      Values match Linux input-event-codes.h which is what
+  //      bucklespring expects (X11 keycode - 8).
+  const SCAN = {
+    // Function-key row
+    'Escape': '01',
+    'F1': '3b', 'F2': '3c', 'F3': '3d', 'F4': '3e',
+    'F5': '3f', 'F6': '40', 'F7': '41', 'F8': '42',
+    'F9': '43', 'F10': '44', 'F11': '57', 'F12': '58',
+    'ScrollLock': '46', 'Pause': '77',
+
+    // Number row
+    'Backquote': '29',
+    'Digit1': '02', 'Digit2': '03', 'Digit3': '04', 'Digit4': '05',
+    'Digit5': '06', 'Digit6': '07', 'Digit7': '08', 'Digit8': '09',
+    'Digit9': '0a', 'Digit0': '0b',
+    'Minus': '0c', 'Equal': '0d', 'Backspace': '0e',
+
+    // Top alpha row
+    'Tab': '0f',
+    'KeyQ': '10', 'KeyW': '11', 'KeyE': '12', 'KeyR': '13', 'KeyT': '14',
+    'KeyY': '15', 'KeyU': '16', 'KeyI': '17', 'KeyO': '18', 'KeyP': '19',
+    'BracketLeft': '1a', 'BracketRight': '1b', 'Backslash': '2b',
+
+    // Home row
+    'CapsLock': '3a',
+    'KeyA': '1e', 'KeyS': '1f', 'KeyD': '20', 'KeyF': '21', 'KeyG': '22',
+    'KeyH': '23', 'KeyJ': '24', 'KeyK': '25', 'KeyL': '26',
+    'Semicolon': '27', 'Quote': '28', 'Enter': '1c',
+
+    // Bottom alpha row
+    'ShiftLeft': '2a', 'IntlBackslash': '56',
+    'KeyZ': '2c', 'KeyX': '2d', 'KeyC': '2e', 'KeyV': '2f', 'KeyB': '30',
+    'KeyN': '31', 'KeyM': '32',
+    'Comma': '33', 'Period': '34', 'Slash': '35',
+    'ShiftRight': '36',
+
+    // Bottom modifier row
+    'ControlLeft': '1d', 'MetaLeft': '7d',
+    'AltLeft': '38', 'Space': '39',
+    'AltRight': '64', 'ContextMenu': '5b', 'ControlRight': '61',
+
+    // Navigation cluster
+    'Insert': '6e', 'Home': '66', 'PageUp': '68',
+    'Delete': '6f', 'End': '6b', 'PageDown': '6d',
+    'ArrowUp': '67', 'ArrowLeft': '69', 'ArrowDown': '6c', 'ArrowRight': '6a',
+
+    // Numpad
+    'NumLock': '45', 'NumpadDivide': '62', 'NumpadMultiply': '37',
+    'NumpadSubtract': '4a', 'NumpadAdd': '4e', 'NumpadEnter': '60',
+    'Numpad7': '47', 'Numpad8': '48', 'Numpad9': '49',
+    'Numpad4': '4b', 'Numpad5': '4c', 'Numpad6': '4d',
+    'Numpad1': '4f', 'Numpad2': '50', 'Numpad3': '51',
+    'Numpad0': '52', 'NumpadDecimal': '53',
+  };
+
+  // Fallback sample (bucklespring's "unknown key" wav) for any e.code
+  // that isn't in SCAN above
+  const FALLBACK = 'ff';
+
+  const AudioCtx = window.AudioContext || window.webkitAudioContext;
+  if (!AudioCtx) return;
+
+  let ctx, master;
+  try {
+    ctx = new AudioCtx();
+    master = ctx.createGain();
+    master.gain.value = MASTER_VOLUME;
+    master.connect(ctx.destination);
+  } catch (e) { return; }
+
+  // buffers.get(scancode) = { press: AudioBuffer|null, release: AudioBuffer|null }
+  const buffers = new Map();
+
+  function load(scancode) {
+    if (buffers.has(scancode)) return buffers.get(scancode);
+    const entry = { press: null, release: null };
+    buffers.set(scancode, entry);
+    [['press', '0'], ['release', '1']].forEach(([kind, suffix]) => {
+      fetch(WAV_PATH + scancode + '-' + suffix + '.wav')
+        .then(r => r.ok ? r.arrayBuffer() : Promise.reject())
+        .then(buf => new Promise((res, rej) =>
+          ctx.decodeAudioData(buf, b => res(b), err => rej(err))))
+        .then(b => { entry[kind] = b; })
+        .catch(() => { /* missing wav — silent */ });
+    });
+    return entry;
+  }
+
+  // Preload every scancode we know about (plus the fallback) up front,
+  // so the very first keystroke is instant. ~200 small wavs.
+  new Set([FALLBACK, ...Object.values(SCAN)]).forEach(load);
+
+  function playBuffer(buf) {
+    if (!buf) return;
+    try {
+      const src = ctx.createBufferSource();
+      src.buffer = buf;
+      src.connect(master);
+      src.start(0);
+    } catch (e) { /* silent */ }
+  }
+
+  // Tracks the scancode chosen at keydown for each held key, so the
+  // matching keyup plays the release of the SAME scancode.
+  const held = new Map(); // e.code (string) → scancode (string)
+
+  document.addEventListener('keydown', (e) => {
+    // OS key-repeat (holding a key) is NOT a physical press — skip it.
+    // On a real Model M, holding the key doesn't make repeated clicks.
+    if (e.repeat) return;
+    // Autoplay policy: resume the context on the first user gesture
+    if (ctx.state === 'suspended') ctx.resume();
+
+    const scan = SCAN[e.code] || FALLBACK;
+    held.set(e.code, scan);
+    playBuffer(load(scan).press);
+  }, true);
+
+  document.addEventListener('keyup', (e) => {
+    const scan = held.get(e.code);
+    if (scan == null) return;
+    held.delete(e.code);
+    const entry = buffers.get(scan);
+    if (entry) playBuffer(entry.release);
+  }, true);
+
+  // If the window loses focus while keys are held, drop them silently
+  // (no keyup will arrive; don't want lingering ghost-held keys)
+  window.addEventListener('blur', () => { held.clear(); });
+})();
+</script>
+</body>
+</html>
