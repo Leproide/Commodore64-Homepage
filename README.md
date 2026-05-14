@@ -154,8 +154,8 @@ None of this would exist without other people's hard work:
 
 This is a mixed-license project — please respect it if you fork or redistribute:
 
-- **The HTML / CSS / JS** in `index.html`: **MIT**. Do what you want, attribution appreciated, see [`LICENSE`](LICENSE).
-- **The bucklespring WAV files** in `bucklespring/`: **GPL-2.0**. They're not mine to relicense. If you redistribute them, you must comply with GPL-2.0 — keep the credit, keep the license text. A copy of the GPL-2.0 text lives in [`LICENSE.bucklespring`](LICENSE.bucklespring), or grab the canonical version from [the FSF](https://www.gnu.org/licenses/old-licenses/gpl-2.0.txt).
+- **The HTML / CSS / JS** in `index.html`: **MIT**. Do what you want, attribution appreciated, see [`LICENSE`](https://opensource.org/licenses/MIT).
+- **The bucklespring WAV files** in `bucklespring/`: **GPL-2.0**. They're not mine to relicense. If you redistribute them, you must comply with GPL-2.0 grab the canonical version from [the FSF](https://www.gnu.org/licenses/old-licenses/gpl-2.0.txt).
 - **The VT323 font** (`VT323.woff2` / `VT323.ttf`): **SIL Open Font License 1.1**. Self-hosted in this repo. OFL allows unrestricted redistribution alongside any kind of software as long as the font itself isn't sold standalone. The full license text lives at [scripts.sil.org/OFL](https://scripts.sil.org/OFL).
 
 GPL-2.0 and MIT are compatible here because the two are kept in separate files — the HTML doesn't "derive from" the WAV files in any meaningful sense, they're loaded at runtime. This is the "mere aggregation" case the GPL explicitly allows. Don't strip the bucklespring credit from your fork and you're fine.
